@@ -3,16 +3,18 @@ from __future__ import print_function
 import pickle
 import os.path
 import time
+
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = [
-    'https://www.googleapis.com/auth/gmail.readonly', 
+    'https://www.googleapis.com/auth/gmail.readonly',
     'https://www.googleapis.com/auth/gmail.modify',
     'https://www.googleapis.com/auth/gmail.compose'
-    ]
+]
+
 
 def build_service():
     """Shows basic usage of the Gmail API.
@@ -41,8 +43,11 @@ def build_service():
 
     return service
 #
+
+
 def find_mail(service):
-    results = service.users().messages().list(userId='me', q='from:papercut@pcssd.org').execute()
+    results = service.users().messages().list(
+        userId='me', q='from:papercut@pcssd.org').execute()
     messages = results.get('messages', [])
 
     message_count = int(input('How many messages do you want to see?'))
@@ -51,7 +56,8 @@ def find_mail(service):
     else:
         print('messages:')
         for message in messages[:message_count]:
-            msg = service.users().messages().get(userId='me', id=message['id']).execute()
+            msg = service.users().messages().get(
+                userId='me', id=message['id']).execute()
             print(msg['snippet'])
             print('\n')
             time.sleep(2)
@@ -60,6 +66,6 @@ def find_mail(service):
 
 service = build_service()
 service_attachment = find_mail(service)
-#find_mail_attachment(service_attachment)
-#if __name__ == '__main__':
+# find_mail_attachment(service_attachment)
+# if __name__ == '__main__':
 #    main()
