@@ -3,10 +3,11 @@ from __future__ import print_function
 import pickle
 import os.path
 import time
-
+import base64
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+from apiclient import errors
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = [
@@ -42,12 +43,10 @@ def build_service():
     service = build('gmail', 'v1', credentials=creds)
 
     return service
-#
 
 
-def find_mail(service):
-    results = service.users().messages().list(
-        userId='me', q='from:papercut@pcssd.org').execute()
+def get_message(service):
+    results = service.users().messages().list(userId='me', q='Label:UNREAD').execute() #q='from:papercut@pcssd.org'
     messages = results.get('messages', [])
 
     message_count = int(input('How many messages do you want to see?'))
@@ -56,16 +55,43 @@ def find_mail(service):
     else:
         print('messages:')
         for message in messages[:message_count]:
-            msg = service.users().messages().get(
-                userId='me', id=message['id']).execute()
+            msg = service.users().messages().get(userId='me', id=message['id']).execute()
             print(msg['snippet'])
+#            print(msg['filename'])
             print('\n')
             time.sleep(2)
-        return msg
+        return  messages
 
 
-service = build_service()
-service_attachment = find_mail(service)
-# find_mail_attachment(service_attachment)
-# if __name__ == '__main__':
-#    main()
+def get_attachments(service, messages):
+    try:
+        for message in messages:
+            msg = service.users().messages().get(userId='me', id=message['id']).execute()
+            for part in msg['payload']['parts']:
+                if part['filename']:
+                    if 'data' in part['body']:
+                        data = part['body']['data']
+                    else:
+                        att_id = part['body']['attachmentId']
+                        att = service.users().messages().attachments().get(userId='me', messageId=message['id'], id=att_id).execute()
+                        data = att['data']
+                    file_data = base64.urlsafe_b64decode(data.encode('UTF-8'))
+                    path = part['filename']
+
+                    with open(path, 'wb') as f:
+                        f.write(file_data)
+                    print(path)
+                    return path
+
+    except errors.HttpError as error:
+        print ('An error occurred: %s' % error)
+
+
+def main():
+    service = build_service()
+    messages = get_message(service)
+    get_attachments(service, messages)
+
+
+if __name__ == '__main__':
+    main()
