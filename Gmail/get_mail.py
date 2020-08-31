@@ -1,13 +1,18 @@
-#!/usr/bin/env python3
+
 from __future__ import print_function
-import pickle
-import os.path
-import time
+
 import base64
-from googleapiclient.discovery import build
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
+import os
+import pickle
+import time
+import sys
+
 from apiclient import errors
+from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+
+from working_dir.working_dir import working_dir as wd
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = [
@@ -17,10 +22,17 @@ SCOPES = [
 ]
 
 
-def build_service():
-    """Shows basic usage of the Gmail API.
-    Lists the user's Gmail labels.
-    """
+def build_service(gmail):
+    '''
+    build_service Makes connection to Gmail API
+
+    Builds the service that allows the connection to Gmail API
+
+    :param gmail: File Folder
+    :type gmail: string
+    :return: object to connect ot Gmail
+    :rtype: string
+    '''
     creds = None
     # The file token.pickle stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
@@ -34,7 +46,7 @@ def build_service():
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
+                gmail+'credentials.json', SCOPES)
             creds = flow.run_local_server(port=0)
         # Save the credentials for the next run
         with open('token.pickle', 'wb') as token:
@@ -46,7 +58,20 @@ def build_service():
 
 
 def get_message(service):
-    results = service.users().messages().list(userId='me', q='Label:UNREAD').execute() #q='from:papercut@pcssd.org'
+    '''
+    get_message gets messages form Gmail as a list
+
+    Gets email form Gmail that meet requirements and retruns a list
+    of messages
+
+    :param service: makes the connection to Gmail for specific account
+    :type service: http cal
+    :return: list of messages
+    :rtype: list
+    '''
+    q=['label:UNREAD', 'from:papercut@pcssd.org']
+    results = service.users().messages().list(
+        userId='me', q=q).execute()  # q='from:papercut@pcssd.org'
     messages = results.get('messages', [])
 
     message_count = int(input('How many messages do you want to see?'))
@@ -55,43 +80,67 @@ def get_message(service):
     else:
         print('messages:')
         for message in messages[:message_count]:
-            msg = service.users().messages().get(userId='me', id=message['id']).execute()
+            msg = service.users().messages().get(
+                userId='me', id=message['id']).execute()
             print(msg['snippet'])
-#            print(msg['filename'])
+            print(msg['payload']['partId'])
             print('\n')
             time.sleep(2)
-        return  messages
+        return messages
 
 
-def get_attachments(service, messages):
+def get_attachments(service, messages, temp):
+    '''
+    get_attachments gets attachment form email
+
+    Gets emails from Gmail and downloads the attachments
+
+    :param service: makes the connection to Gmail for specific account
+    :type service: http cal
+    :param messages: Gmail messages returned
+    :type messages: list of dict
+    :param temp: temporary working folder
+    :type temp: string
+    '''
+    print('Getting attachments.')
     try:
         for message in messages:
-            msg = service.users().messages().get(userId='me', id=message['id']).execute()
-            for part in msg['payload']['parts']:
-                if part['filename']:
-                    if 'data' in part['body']:
-                        data = part['body']['data']
+            msg = service.users().messages().get(
+                userId='me', id=message['id']).execute()
+            messagePayload = msg['payload']
+            messagePart = messagePayload['parts']
+            for temp_dict in messagePart:
+                if temp_dict['filename'] != '':
+                    print(temp_dict['filename'])
+                    if 'data' in temp_dict['body']:
+                        file_data = base64.urlsafe_b64encode(
+                            temp_dict['body']['data'].encode('UTF-8'))
+                    elif 'attachmentId' in temp_dict['body']:
+                        attachment = service.users().messages().attachments().get(
+                            userId='me', messageId=message['id'], id=temp_dict['body']['attachmentId']
+                        ).execute()
+                        file_data = base64.urlsafe_b64decode(
+                            attachment['data'].encode('UTF-8'))
                     else:
-                        att_id = part['body']['attachmentId']
-                        att = service.users().messages().attachments().get(userId='me', messageId=message['id'], id=att_id).execute()
-                        data = att['data']
-                    file_data = base64.urlsafe_b64decode(data.encode('UTF-8'))
-                    path = part['filename']
-
-                    with open(path, 'wb') as f:
-                        f.write(file_data)
-                    print(path)
-                    return path
-
+                        file_data = None
+                    if file_data != None:
+                        path = ''.join([temp, temp_dict['filename']])
+                        with open(path, 'wb') as f:
+                            f.write(file_data)
+                    print('File has been written to temp')
     except errors.HttpError as error:
-        print ('An error occurred: %s' % error)
+        print('An error occurred: %s' % error)
 
 
 def main():
-    service = build_service()
+    googleProject, gmail, drive, temp = wd()
+    service = build_service(gmail)
     messages = get_message(service)
-    get_attachments(service, messages)
+    get_attachments(service, messages, temp)
 
 
 if __name__ == '__main__':
+    print('This file has to be called from the Main.py file')
+    print('in the GoogleProjects Folder')
+else:
     main()
