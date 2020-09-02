@@ -4,8 +4,9 @@ from __future__ import print_function
 import base64
 import os
 import pickle
-import time
+import re
 import sys
+import time
 
 from apiclient import errors
 from google.auth.transport.requests import Request
@@ -69,14 +70,18 @@ def get_message(service):
     :return: list of messages
     :rtype: list
     '''
-    q=['label:UNREAD', 'from:papercut@pcssd.org']
+    # q contains required Gmail labels to get correct files
+    q='label:UNREAD from:papercut@pcssd.org has:attachment'
+    # gets request messages and retruns a list
     results = service.users().messages().list(
-        userId='me', q=q).execute()  # q='from:papercut@pcssd.org'
+        userId='me', q=q).execute()
     messages = results.get('messages', [])
 
+    # gets the number of messages to be displayed
     message_count = int(input('How many messages do you want to see?'))
     if not messages:
         print('No messages found.')
+        exit()
     else:
         print('messages:')
         for message in messages[:message_count]:
@@ -85,7 +90,8 @@ def get_message(service):
             print(msg['snippet'])
             print(msg['payload']['partId'])
             print('\n')
-            time.sleep(2)
+            time.sleep(1)
+        # returns the list of messages    
         return messages
 
 
@@ -102,16 +108,32 @@ def get_attachments(service, messages, temp):
     :param temp: temporary working folder
     :type temp: string
     '''
+    # search patterns for subject line in mail
+    executive_summary = r'(:\s(.+)\sE)'
+    printer_groups = r'(P[a-z].+- (s[a-z]{6}[A-Z]{3}?|s[a-z]{6}))'
+    date_of_report = r'(([A-Z][a-z]{2})\s\d,\s(\d{4}))'
     print('Getting attachments.')
     try:
         for message in messages:
             msg = service.users().messages().get(
                 userId='me', id=message['id']).execute()
             messagePayload = msg['payload']
+            subject_list = messagePayload['headers'][21:22] 
+            subject_dict = subject_list.pop() # gets the dict that contains the subject
+            # breaks down the dict to get the subject as a string
+            # then pulls the name to name the file
+            for name, value in subject_dict.items():
+                subject_full = value
+                es = re.search(executive_summary, value)
+                pg = re.search(printer_groups, value)
+                if es != None:
+                    sch_name = es.group(2)
+                elif pg != None:
+                    pg_name = pg.group(1)
             messagePart = messagePayload['parts']
+            # pulls the attachment data out of the message
             for temp_dict in messagePart:
                 if temp_dict['filename'] != '':
-                    print(temp_dict['filename'])
                     if 'data' in temp_dict['body']:
                         file_data = base64.urlsafe_b64encode(
                             temp_dict['body']['data'].encode('UTF-8'))
@@ -123,11 +145,21 @@ def get_attachments(service, messages, temp):
                             attachment['data'].encode('UTF-8'))
                     else:
                         file_data = None
+                    # combines the filename and the name form the subject and writes
+                    # the file to a temp directory
                     if file_data != None:
-                        path = ''.join([temp, temp_dict['filename']])
+                        if sch_name != None:
+                            new_filename = sch_name +' '+ temp_dict['filename']
+                            path = ''.join([temp, new_filename])
+                        elif pg_name != None:
+                            new_filename = pg_name +' '+ temp_dict['filename']
+                            path = ''.join([temp, new_filename])
                         with open(path, 'wb') as f:
                             f.write(file_data)
-                    print('File has been written to temp')
+                            print(f'{new_filename} as been created')
+                            # these variables need to be set to none for next pass in for loop
+                            pg_name = None
+                            sch_name = None
     except errors.HttpError as error:
         print('An error occurred: %s' % error)
 
@@ -137,10 +169,11 @@ def main():
     service = build_service(gmail)
     messages = get_message(service)
     get_attachments(service, messages, temp)
+    return print(' All files have been downloaded')
 
-
-if __name__ == '__main__':
-    print('This file has to be called from the Main.py file')
-    print('in the GoogleProjects Folder')
-else:
-    main()
+main()
+#if __name__ == '__main__':
+#    print('This file has to be called from the Main.py file')
+#    print('in the GoogleProjects Folder')
+#else:
+#    main()
