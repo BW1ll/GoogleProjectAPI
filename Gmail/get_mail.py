@@ -10,7 +10,7 @@ import time
 
 from apiclient import errors
 from google.auth.transport.requests import Request
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import InstalledAppFlow3
 from googleapiclient.discovery import build
 
 from working_dir.working_dir import working_dir as wd
@@ -23,11 +23,11 @@ SCOPES = [
 ]
 
 
-def build_service(gmail):
+def build_gmail_service(gmail):
     '''
-    build_service Makes connection to Gmail API
+    build_gmail_service Makes connection to Gmail API
 
-    Builds the service that allows the connection to Gmail API
+    Builds the gmail_service that allows the connection to Gmail API
 
     :param gmail: File Folder
     :type gmail: string
@@ -53,27 +53,27 @@ def build_service(gmail):
         with open('token.pickle', 'wb') as token:
             pickle.dump(creds, token)
 
-    service = build('gmail', 'v1', credentials=creds)
+    gmail_service = build('gmail', 'v1', credentials=creds)
 
-    return service
+    return gmail_service
 
 
-def get_message(service):
+def get_message(gmail_service):
     '''
     get_message gets messages form Gmail as a list
 
     Gets email form Gmail that meet requirements and retruns a list
     of messages
 
-    :param service: makes the connection to Gmail for specific account
-    :type service: http cal
+    :param gmail_service: makes the connection to Gmail for specific account
+    :type gmail_service: http call
     :return: list of messages
     :rtype: list
     '''
     # q contains required Gmail labels to get correct files
     q='label:UNREAD from:papercut@pcssd.org has:attachment'
     # gets request messages and retruns a list
-    results = service.users().messages().list(
+    results = gmail_service.users().messages().list(
         userId='me', q=q).execute()
     messages = results.get('messages', [])
 
@@ -85,7 +85,7 @@ def get_message(service):
     else:
         print('messages:')
         for message in messages[:message_count]:
-            msg = service.users().messages().get(
+            msg = gmail_service.users().messages().get(
                 userId='me', id=message['id']).execute()
             print(msg['snippet'])
             print(msg['payload']['partId'])
@@ -95,14 +95,14 @@ def get_message(service):
         return messages
 
 
-def get_attachments(service, messages, temp):
+def get_attachments(gmail_service, messages, temp):
     '''
     get_attachments gets attachment form email
 
     Gets emails from Gmail and downloads the attachments
 
-    :param service: makes the connection to Gmail for specific account
-    :type service: http cal
+    :param gmail_service: makes the connection to Gmail for specific account
+    :type gmail_service: http cal
     :param messages: Gmail messages returned
     :type messages: list of dict
     :param temp: temporary working folder
@@ -115,7 +115,7 @@ def get_attachments(service, messages, temp):
     print('Getting attachments.')
     try:
         for message in messages:
-            msg = service.users().messages().get(
+            msg = gmail_service.users().messages().get(
                 userId='me', id=message['id']).execute()
             messagePayload = msg['payload']
             subject_list = messagePayload['headers'][21:22] 
@@ -138,7 +138,7 @@ def get_attachments(service, messages, temp):
                         file_data = base64.urlsafe_b64encode(
                             temp_dict['body']['data'].encode('UTF-8'))
                     elif 'attachmentId' in temp_dict['body']:
-                        attachment = service.users().messages().attachments().get(
+                        attachment = gmail_service.users().messages().attachments().get(
                             userId='me', messageId=message['id'], id=temp_dict['body']['attachmentId']
                         ).execute()
                         file_data = base64.urlsafe_b64decode(
@@ -166,9 +166,9 @@ def get_attachments(service, messages, temp):
 
 def main():
     googleProject, gmail, drive, temp = wd()
-    service = build_service(gmail)
-    messages = get_message(service)
-    get_attachments(service, messages, temp)
+    gmail_service = build_gmail_service(gmail)
+    messages = get_message(gmail_service)
+    get_attachments(gmail_service, messages, temp)
     return print(' All files have been downloaded')
 
 main()

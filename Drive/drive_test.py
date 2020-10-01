@@ -1,9 +1,20 @@
 from __future__ import print_function
-import pickle
+
+import base64
+import os
 import os.path
+import pandas as pd
+import pickle
+import re
+import sys
+import time
+
+from apiclient import errors
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+
+from working_dir.working_dir import working_dir as wd
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = [
@@ -15,10 +26,9 @@ SCOPES = [
     'https://www.googleapis.com/auth/drive.metadata'
 ]
 
-def main():
-    """Shows basic usage of the Drive v3 API.
-    Prints the names and ids of the first 10 files the user has access to.
-    """
+
+def build_drive_service():
+
     creds = None
     # The file token.pickle stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
@@ -39,18 +49,26 @@ def main():
             pickle.dump(creds, token)
 
     drive_service = build('drive', 'v3', credentials=creds)
+    return drive_service
 
-    # Call the Drive v3 API
-    results = drive_service.files().list(
+def get_folers(drive_service):
+    folder_id = '0B90NxPhuoYQ-UTFFTXA4X0JJVk0'
+    query = f'parents = "{folder_id}"'
+    q = ["mimeType = 'application/vnd.google-apps.folder'", query]
+
+    response = drive_service.files().list(
         pageSize=10, fields="nextPageToken, files(id, name)").execute()
-    items = results.get('files', [])
+    folders = response.get('folder', [])
+    nextPageToken = response.get('nextPageToken')
 
-    if not items:
-        print('No files found.')
-    else:
-        print('Files:')
-        for item in items:
-            print(u'{0} ({1})'.format(item['name'], item['id']))
+    while nextPageToken:
+        response = drive_service.files().list(
+            pageSize=10, fields="nextPageToken, files(id, name)").execute()
+        folders.extend(response.get('folder', []))
+        nextPageToken = response.get('nextPageToken')
 
-if __name__ == '__main__':
-    main()
+    df = pd.DataFrame(folders)
+    print(df)
+
+drive_service = build_drive_service()
+get_folers(drive_service)
